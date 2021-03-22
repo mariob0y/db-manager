@@ -10,8 +10,9 @@ DB_NAME = 'postgres'
 DB_USER = 'postgres'
 DB_PASS = 'postgres'
 
-MAX_CONNECTIONS = 2
-MAX_TIME = 2
+MAX_CONNECTIONS = 5
+MAX_TIME = 10
+DELAY = 0.1
 
 
 class DBPool:
@@ -19,16 +20,16 @@ class DBPool:
     DB connection pool class.
     """
 
-    conn_pool = []
-
     def __init__(self):
         self.credentials = {'dbname': DB_NAME,
                             'user': DB_USER,
                             'password': DB_PASS,
                             'host': DB_HOST}
         self.max_conn = MAX_CONNECTIONS
+        self.conn_pool = []
+        self.delay = DELAY
 
-        thread = threading.Thread(target=self.manager, args=())
+        thread = threading.Thread(target=self.time_keeper, args=())
         thread.daemon = True
         thread.start()
 
@@ -52,7 +53,29 @@ class DBPool:
 
     def close_conn(self, conn):
         """
-        Closing connection
+        Closing connection method
+        :param conn:
+        :return:
+        """
+        conn["connection"].close()
+
+    def get_conn(self):
+        """
+        Getting existing connection from pool
+        :return:
+        """
+        conn = None
+        while not conn:
+            if self.conn_pool:
+                conn = self.conn_pool.pop()
+            else:
+                conn = self.create_conn()
+            time.sleep(self.delay)
+        return conn
+
+    def remove_conn(self, conn):
+        """
+        Removing connection from pool method
         :param conn:
         :return:
         """
@@ -60,10 +83,10 @@ class DBPool:
             self.conn_pool.remove(conn)
         except ValueError:
             pass
-        conn['connection'].close()
+        self.close_conn(conn)
         print(f'Closed connection: {conn}')
 
-    def manager(self):
+    def time_keeper(self):
         """
         Managing connection time span
         :return:
@@ -71,4 +94,4 @@ class DBPool:
         while True:
             for conn in self.conn_pool:
                 if (time.time() - conn['created']) > MAX_TIME:
-                    self.close_conn(conn)
+                    self.remove_conn(conn)
